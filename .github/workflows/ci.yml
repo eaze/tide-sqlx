@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - latest
+
+env:
+  RUSTFLAGS: -Dwarnings
+
+jobs:
+  build_and_test:
+    name: Build and test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04]
+        rust: [stable]
+
+    steps:
+    - uses: actions/checkout@master
+
+    - name: check
+      run: cargo check --workspace --benches --bins --examples --tests
+
+    - name: tests
+      run: cargo test --all
+      env:
+        RUST_BACKTRACE: short
+
+  check_fmt_and_docs:
+    name: Checking fmt, clippy, and docs
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@master
+
+    - name: clippy
+      run: cargo clippy --workspace --benches --bins --examples --tests
+
+    - name: fmt
+      run: cargo fmt --all -- --check
+
+    - name: docs
+      run: cargo doc --no-deps
