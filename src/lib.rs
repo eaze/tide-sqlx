@@ -1,3 +1,45 @@
+//! A [Tide][] middleware which holds a pool of postgres connections, and automatically hands
+//! each [tide::Request][] a connection, which may transparently be either a postgres transaction,
+//! or a direct pooled connection.
+//!
+//! By default, transactions are used for all http methods other than GET and HEAD.
+//!
+//! When using this, use the `PostgresRequestExt` extenstion trait to get the connection.
+//!
+//! ## Example
+//!
+//! ```no_run
+//! # #[async_std::main]
+//! # async fn main() -> anyhow::Result<()> {
+//! use sqlx::Acquire; // Or sqlx::prelude::*;
+//!
+//! use tide_sqlx::PostgresConnectionMiddleware;
+//! use tide_sqlx::PostgresRequestExt;
+//!
+//! let mut app = tide::new();
+//! app.with(PostgresConnectionMiddleware::new("postgres://localhost/geolocality", 5).await?);
+//!
+//! app.at("/").post(|req: tide::Request<()>| async move {
+//!     let mut pg_conn = req.postgres_conn().await;
+//!
+//!     pg_conn.acquire().await?; // Pass this to e.g. "fetch_optional()" from a sqlx::Query
+//!
+//!     Ok("")
+//! });
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Why you may want to use this
+//!
+//! Postgres transactions are very useful because they allow easy, assured rollback if something goes wrong.
+//! However, transactions incur extra runtime cost which is too expensive to justify for READ operations that _do not need_ this behavior.
+//!
+//! In order to allow transactions to be used seamlessly in endpoints, this middleware manages a transaction if one is deemed desirable.
+//!
+//! [tide::Request]: https://docs.rs/tide/0.15.0/tide/struct.Request.html
+//! [Tide]: https://docs.rs/tide/0.15.0/tide/
+
 use std::fmt::{self, Debug};
 use std::sync::Arc;
 
@@ -30,8 +72,9 @@ impl Debug for ConnectionWrapInner {
 #[doc(hidden)]
 pub type ConnectionWrap = Arc<RwLock<ConnectionWrapInner>>;
 
-/// This middleware holds a pool of postgres connections, and automatically hands each [tide::Request][] a connection,
-/// which may transparently be either a postgres transaction, or a direct pooled connection.
+/// This middleware holds a pool of postgres connections, and automatically hands each
+/// [tide::Request][] a connection, which may transparently be either a postgres transaction,
+/// or a direct pooled connection.
 ///
 /// By default, transactions are used for all http methods other than GET and HEAD.
 ///
@@ -44,11 +87,11 @@ pub type ConnectionWrap = Arc<RwLock<ConnectionWrapInner>>;
 /// # async fn main() -> anyhow::Result<()> {
 /// use sqlx::Acquire; // Or sqlx::prelude::*;
 ///
-/// use geolocality::middleware::PostgresConnectionMiddleware;
-/// use geolocality::middleware::PostgresRequestExt;
+/// use tide_sqlx::PostgresConnectionMiddleware;
+/// use tide_sqlx::PostgresRequestExt;
 ///
 /// let mut app = tide::new();
-/// app.with(PostgresConnectionMiddleware::new("postgres://localhost/geolocality", 5).await?);
+/// app.with(PostgresConnectionMiddleware::new("postgres://localhost/a_database", 5).await?);
 ///
 /// app.at("/").post(|req: tide::Request<()>| async move {
 ///     let mut pg_conn = req.postgres_conn().await;
@@ -61,7 +104,7 @@ pub type ConnectionWrap = Arc<RwLock<ConnectionWrapInner>>;
 /// # }
 /// ```
 ///
-/// [tide::Request]: https://docs.rs/tide/0.14.0/tide/struct.Request.html
+/// [tide::Request]: https://docs.rs/tide/0.15.0/tide/struct.Request.html
 #[derive(Debug, Clone)]
 pub struct PostgresConnectionMiddleware {
     pg_pool: PgPool,
@@ -81,13 +124,7 @@ impl PostgresConnectionMiddleware {
     }
 }
 
-// Why PostgresConnectionMiddleware exists:
-//
-// Postgres transactions are very useful because they allow easy, assured rollback if something goes wrong.
-// However, transactions incur extra runtime cost which is too expensive to justify for READ operations that DO NOT NEED this behavior.
-//
-// In order to allow transactions to be used seamlessly in endpoints, this middleware manages a transaction if one is deemed desirable.
-//
+
 // This is complicated because of sqlx's typing. We would like a dynamic `sqlx::Executor`, however the Executor trait
 // cannot be made into an object because it has generic methods.
 // Rust does not allow this due to exponential fat-pointer table size.
@@ -156,9 +193,10 @@ impl<State: Clone + Send + Sync + 'static> Middleware<State> for PostgresConnect
     }
 }
 
-/// An extension trait for tide::Request which does proper unwrapping of the connection from [`req.ext()`][].
+/// An extension trait for [tide::Request][] which does proper unwrapping of the connection from [`req.ext()`][].
 ///
-/// [`req.ext()`]: https://docs.rs/tide/0.14.0/tide/struct.Request.html#method.ext
+/// [`req.ext()`]: https://docs.rs/tide/0.15.0/tide/struct.Request.html#method.ext
+/// [tide::Request]: https://docs.rs/tide/0.15.0/tide/struct.Request.html
 #[async_trait]
 pub trait PostgresRequestExt<'req> {
     /// Get the postgres connection for the current Request.
@@ -173,14 +211,14 @@ pub trait PostgresRequestExt<'req> {
     /// ```no_run
     /// # #[async_std::main]
     /// # async fn main() -> anyhow::Result<()> {
-    /// # use geolocality::middleware::PostgresConnectionMiddleware;
+    /// # use tide_sqlx::PostgresConnectionMiddleware;
     /// #
     /// # let mut app = tide::new();
-    /// # app.with(PostgresConnectionMiddleware::new("postgres://localhost/geolocality", 5).await?);
+    /// # app.with(PostgresConnectionMiddleware::new("postgres://localhost/a_database", 5).await?);
     /// #
     /// use sqlx::Acquire; // Or sqlx::prelude::*;
     ///
-    /// use geolocality::middleware::PostgresRequestExt;
+    /// use tide_sqlx::PostgresRequestExt;
     ///
     /// app.at("/").post(|req: tide::Request<()>| async move {
     ///     let mut pg_conn = req.postgres_conn().await;
