@@ -1,0 +1,40 @@
+[package]
+name = "tide-sqlx"
+version = "0.1.0"
+authors = [
+    "Jeremiah Senkpiel <fishrock123@rocketmail.com>",
+    "Chris Dickinson <christopher.s.dickinson@gmail.com>",
+    "C J Silverio <ceejceej@gmail.com>",
+    "Kyle Anne Laymon <kyle.laymon@gmail.com>",
+]
+edition = "2018"
+license = "BlueOak-1.0.0"
+description = "Tide middleware for SQLx pooled connections & transactions."
+readme = "README.md"
+repository = "https://github.com/eaze/tide-sqlx"
+keywords = ["tide", "middleware", "sqlx", "postgres", "transaction"]
+categories = [
+  "web-programming::http-server"
+]
+
+[features]
+# database
+any = [ "sqlx/any" ]
+postgres = [ "sqlx/postgres"]
+mysql = [ "sqlx/mysql" ]
+sqlite = [ "sqlx/sqlite" ]
+mssql = [ "sqlx/mssql" ]
+
+# tls implementation
+native-tls = [ "sqlx/runtime-async-std-native-tls" ]
+rustls = [ "sqlx/runtime-async-std-rustls" ]
+
+[dependencies]
+async-std = "1.7.0"
+either = "1.6.1"
+futures-core = "0.3.8"
+tide = "0.15.0"
+
+[dependencies.sqlx]
+version = "0.4.1"
+features = ["postgres"]
