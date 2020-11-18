@@ -124,7 +124,6 @@ impl PostgresConnectionMiddleware {
     }
 }
 
-
 // This is complicated because of sqlx's typing. We would like a dynamic `sqlx::Executor`, however the Executor trait
 // cannot be made into an object because it has generic methods.
 // Rust does not allow this due to exponential fat-pointer table size.
