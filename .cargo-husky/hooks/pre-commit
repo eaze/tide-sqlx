@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+for file in $(git diff --name-only --cached | grep '.rs'); do
+  rustfmt --edition 2018 $file # this will NEVER age poorly
+  git add "$file"
+done

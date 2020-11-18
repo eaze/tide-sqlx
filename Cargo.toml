@@ -47,3 +47,8 @@ anyhow = "1.0.34"
 [dev-dependencies.async-std]
 version = "1.7.0"
 features = ["attributes"]
+
+[dev-dependencies.cargo-husky]
+version = "1"
+default-features = false
+features = ["user-hooks"]
