@@ -1,0 +1,15 @@
+[package]
+name = "tide-sqlx"
+version = "0.1.0"
+authors = [
+    "Jeremiah Senkpiel <fishrock123@rocketmail.com>",
+]
+edition = "2018"
+license = "BlueOak-1.0.0"
+description = "Tide middleware for SQLx pooled connections & transactions."
+readme = "README.md"
+repository = "https://github.com/eaze/tide-sqlx"
+keywords = ["tide", "middleware", "sqlx", "postgres", "transaction"]
+categories = [
+  "web-programming::http-server"
+]
