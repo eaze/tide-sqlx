@@ -17,6 +17,10 @@ categories = [
   "web-programming::http-server"
 ]
 
+[package.metadata.docs.rs]
+features = [ "rustls" ]
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 docs = ["rustls"]
 
