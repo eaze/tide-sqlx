@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2020-11-19
+
+- Deps: `default-features = false` for Tide.
+
 ## [0.2.4] - 2020-11-18
 
 - Fix: properly expose `postgress_conn()` from `PostgresRequestExt`.
