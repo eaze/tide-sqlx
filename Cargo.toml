@@ -1,6 +1,6 @@
 [package]
 name = "tide-sqlx"
-version = "0.2.3"
+version = "0.2.4"
 authors = [
     "Jeremiah Senkpiel <fishrock123@rocketmail.com>",
     "Chris Dickinson <christopher.s.dickinson@gmail.com>",
