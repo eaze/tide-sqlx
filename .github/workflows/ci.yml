@@ -22,10 +22,10 @@ jobs:
     - uses: actions/checkout@master
 
     - name: check
-      run: cargo check --workspace --benches --bins --examples --tests
+      run: cargo check --workspace --benches --bins --examples --tests --features=docs
 
     - name: tests
-      run: cargo test --all
+      run: cargo test --all --features=docs
       env:
         RUST_BACKTRACE: short
 
@@ -37,7 +37,7 @@ jobs:
     - uses: actions/checkout@master
 
     - name: clippy
-      run: cargo clippy --workspace --benches --bins --examples --tests
+      run: cargo clippy --workspace --benches --bins --examples --tests --features=docs
 
     - name: fmt
       run: cargo fmt --all -- --check
