@@ -18,6 +18,8 @@ categories = [
 ]
 
 [features]
+docs = ["rustls"]
+
 # database
 any = [ "sqlx/any" ]
 postgres = [ "sqlx/postgres"]
