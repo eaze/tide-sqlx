@@ -12,17 +12,20 @@
 //! # #[async_std::main]
 //! # async fn main() -> anyhow::Result<()> {
 //! use sqlx::Acquire; // Or sqlx::prelude::*;
+//! use sqlx::postgres::Postgres;
 //!
-//! use tide_sqlx::PostgresConnectionMiddleware;
-//! use tide_sqlx::PostgresRequestExt;
+//! use tide_sqlx::SQLxMiddleware;
+//! use tide_sqlx::SQLxRequestExt;
 //!
 //! let mut app = tide::new();
-//! app.with(PostgresConnectionMiddleware::new("postgres://localhost/geolocality", 5).await?);
+//! app.with(SQLxMiddleware::<Postgres>::new("postgres://localhost/geolocality", 5).await?);
 //!
 //! app.at("/").post(|req: tide::Request<()>| async move {
-//!     let mut pg_conn = req.postgres_conn().await;
+//!     let mut pg_conn = req.sqlx_conn::<Postgres>().await;
 //!
-//!     pg_conn.acquire().await?; // Pass this to e.g. "fetch_optional()" from a sqlx::Query
+//!     sqlx::query("SELECT * FROM users")
+//!         .fetch_optional(pg_conn.acquire().await?)
+//!         .await;
 //!
 //!     Ok("")
 //! });
@@ -41,26 +44,25 @@
 //! [Tide]: https://docs.rs/tide/0.15.0/tide/
 
 use std::fmt::{self, Debug};
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use async_std::sync::{RwLock, RwLockWriteGuard};
-use either::Either;
-use futures_core::future::BoxFuture;
-use futures_core::stream::BoxStream;
-use sqlx::database::HasStatement;
-use sqlx::pool::PoolConnection;
-use sqlx::postgres::{PgConnection, PgDone, PgPool, PgPoolOptions, PgRow, PgTypeInfo, Postgres};
-use sqlx::{Acquire, Describe, Execute, Executor, Transaction};
+use sqlx::pool::{Pool, PoolConnection, PoolOptions};
+use sqlx::{Database, Transaction};
 use tide::utils::async_trait;
 use tide::{http::Method, Middleware, Next, Request, Result};
 
 #[doc(hidden)]
-pub enum ConnectionWrapInner {
-    Transacting(Transaction<'static, Postgres>),
-    Plain(PoolConnection<Postgres>),
+pub enum ConnectionWrapInner<DB: Database> {
+    Transacting(Transaction<'static, DB>),
+    Plain(PoolConnection<DB>),
 }
 
-impl Debug for ConnectionWrapInner {
+unsafe impl<DB: Database> Send for ConnectionWrapInner<DB> {}
+unsafe impl<DB: Database> Sync for ConnectionWrapInner<DB> {}
+
+impl<DB: Database> Debug for ConnectionWrapInner<DB> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Transacting(_) => f.debug_struct("ConnectionWrapInner::Transacting").finish(),
@@ -70,7 +72,7 @@ impl Debug for ConnectionWrapInner {
 }
 
 #[doc(hidden)]
-pub type ConnectionWrap = Arc<RwLock<ConnectionWrapInner>>;
+pub type ConnectionWrap<DB> = Arc<RwLock<ConnectionWrapInner<DB>>>;
 
 /// This middleware holds a pool of postgres connections, and automatically hands each
 /// [tide::Request][] a connection, which may transparently be either a postgres transaction,
@@ -86,17 +88,20 @@ pub type ConnectionWrap = Arc<RwLock<ConnectionWrapInner>>;
 /// # #[async_std::main]
 /// # async fn main() -> anyhow::Result<()> {
 /// use sqlx::Acquire; // Or sqlx::prelude::*;
+/// use sqlx::postgres::Postgres;
 ///
-/// use tide_sqlx::PostgresConnectionMiddleware;
-/// use tide_sqlx::PostgresRequestExt;
+/// use tide_sqlx::SQLxMiddleware;
+/// use tide_sqlx::SQLxRequestExt;
 ///
 /// let mut app = tide::new();
-/// app.with(PostgresConnectionMiddleware::new("postgres://localhost/a_database", 5).await?);
+/// app.with(SQLxMiddleware::<Postgres>::new("postgres://localhost/a_database", 5).await?);
 ///
 /// app.at("/").post(|req: tide::Request<()>| async move {
-///     let mut pg_conn = req.postgres_conn().await;
+///     let mut pg_conn = req.sqlx_conn::<Postgres>().await;
 ///
-///     pg_conn.acquire().await?; // Pass this to e.g. "fetch_optional()" from a sqlx::Query
+///     sqlx::query("SELECT * FROM users")
+///         .fetch_optional(pg_conn.acquire().await?)
+///         .await;
 ///
 ///     Ok("")
 /// });
@@ -106,21 +111,21 @@ pub type ConnectionWrap = Arc<RwLock<ConnectionWrapInner>>;
 ///
 /// [tide::Request]: https://docs.rs/tide/0.15.0/tide/struct.Request.html
 #[derive(Debug, Clone)]
-pub struct PostgresConnectionMiddleware {
-    pg_pool: PgPool,
+pub struct SQLxMiddleware<DB: Database> {
+    pool: Pool<DB>,
 }
 
-impl PostgresConnectionMiddleware {
-    /// Create a new instance of `PostgresConnectionMiddleware`.
+impl<DB: Database> SQLxMiddleware<DB> {
+    /// Create a new instance of `SQLxMiddleware`.
     pub async fn new(
         pgurl: &'_ str,
         max_connections: u32,
     ) -> std::result::Result<Self, sqlx::Error> {
-        let pg_pool = PgPoolOptions::new()
+        let pool: Pool<DB> = PoolOptions::new()
             .max_connections(max_connections)
             .connect(pgurl)
             .await?;
-        Ok(Self { pg_pool })
+        Ok(Self { pool })
     }
 }
 
@@ -144,14 +149,14 @@ impl PostgresConnectionMiddleware {
 // and so the `PostgresRequestExt` extension trait exists to make that nicer.
 
 #[async_trait]
-impl<State: Clone + Send + Sync + 'static> Middleware<State> for PostgresConnectionMiddleware {
+impl<State: Clone + Send + Sync + 'static, DB: Database> Middleware<State> for SQLxMiddleware<DB> {
     async fn handle(&self, mut req: Request<State>, next: Next<'_, State>) -> Result {
         // Dual-purpose: Avoid ever running twice, or pick up a test connection if one exists.
         //
         // TODO(Fishrock): implement recursive depth transactions.
         //   SQLx 0.4 Transactions which are recursive carry a Borrow to the containing Transaction.
         //   Blocked by language feature for Tide - Request extensions cannot hold Borrows.
-        if req.ext::<ConnectionWrap>().is_some() {
+        if req.ext::<ConnectionWrap<DB>>().is_some() {
             return Ok(next.run(req).await);
         }
 
@@ -163,9 +168,9 @@ impl<State: Clone + Send + Sync + 'static> Middleware<State> for PostgresConnect
         };
 
         let conn_wrap_inner = if is_safe {
-            ConnectionWrapInner::Plain(self.pg_pool.acquire().await?)
+            ConnectionWrapInner::Plain(self.pool.acquire().await?)
         } else {
-            ConnectionWrapInner::Transacting(self.pg_pool.begin().await?)
+            ConnectionWrapInner::Transacting(self.pool.begin().await?)
         };
         let conn_wrap = Arc::new(RwLock::new(conn_wrap_inner));
         req.set_ext(conn_wrap.clone());
@@ -184,7 +189,7 @@ impl<State: Clone + Send + Sync + 'static> Middleware<State> for PostgresConnect
                 // Given the pool would slowly be resource-starved if we continue, there is no good way to continue.
                 //
                 // I'm bewildered, you're bewildered. Let's panic!
-                panic!("We have err'd egregiously! Could not unwrap refcounted postgres conn for commit; handler may be storing connection or request inappropiately?")
+                panic!("We have err'd egregiously! Could not unwrap refcounted SQLx connection for COMMIT; handler may be storing connection or request inappropiately?")
             }
         }
 
@@ -197,7 +202,7 @@ impl<State: Clone + Send + Sync + 'static> Middleware<State> for PostgresConnect
 /// [`req.ext()`]: https://docs.rs/tide/0.15.0/tide/struct.Request.html#method.ext
 /// [tide::Request]: https://docs.rs/tide/0.15.0/tide/struct.Request.html
 #[async_trait]
-pub trait PostgresRequestExt<'req> {
+pub trait SQLxRequestExt {
     /// Get the postgres connection for the current Request.
     ///
     /// This will return a "write" guard from a read-write lock.
@@ -210,115 +215,67 @@ pub trait PostgresRequestExt<'req> {
     /// ```no_run
     /// # #[async_std::main]
     /// # async fn main() -> anyhow::Result<()> {
-    /// # use tide_sqlx::PostgresConnectionMiddleware;
+    /// # use tide_sqlx::SQLxMiddleware;
+    /// # use sqlx::postgres::Postgres;
     /// #
     /// # let mut app = tide::new();
-    /// # app.with(PostgresConnectionMiddleware::new("postgres://localhost/a_database", 5).await?);
+    /// # app.with(SQLxMiddleware::<Postgres>::new("postgres://localhost/a_database", 5).await?);
     /// #
     /// use sqlx::Acquire; // Or sqlx::prelude::*;
     ///
-    /// use tide_sqlx::PostgresRequestExt;
+    /// use tide_sqlx::SQLxRequestExt;
     ///
     /// app.at("/").post(|req: tide::Request<()>| async move {
-    ///     let mut pg_conn = req.postgres_conn().await;
+    ///     let mut pg_conn = req.sqlx_conn::<Postgres>().await;
     ///
-    ///     // Pass this to e.g. "fetch_optional()" from a sqlx::Query
-    ///     pg_conn.acquire().await?;
+    ///     sqlx::query("SELECT * FROM users")
+    ///         .fetch_optional(pg_conn.acquire().await?)
+    ///         .await;
     ///
     ///     Ok("")
     /// });
     /// # Ok(())
     /// # }
     /// ```
-    async fn postgres_conn(&'req self) -> RwLockWriteGuard<'req, ConnectionWrapInner>;
+    async fn sqlx_conn<'req, DB: Database>(
+        &'req self,
+    ) -> RwLockWriteGuard<'req, ConnectionWrapInner<DB>>;
 }
 
+// postgres = [ "sqlx/postgres"]
+// mysql = [ "sqlx/mysql" ]
+// sqlite = [ "sqlx/sqlite" ]
+// mssql = [ "sqlx/mssql" ]
+
 #[async_trait]
-impl<'req, T: Send + Sync + 'static> PostgresRequestExt<'req> for Request<T> {
-    async fn postgres_conn(&'req self) -> RwLockWriteGuard<'req, ConnectionWrapInner> {
-        let pg_conn: &ConnectionWrap = self
+impl<T: Send + Sync + 'static> SQLxRequestExt for Request<T> {
+    async fn sqlx_conn<'req, DB>(&'req self) -> RwLockWriteGuard<'req, ConnectionWrapInner<DB>>
+    where
+        DB: Database,
+    {
+        let pg_conn: &ConnectionWrap<DB> = self
             .ext()
-            .expect("You must install Postgres middleware providing ConnectionWrap");
+            .expect("You must install SQLx middleware providing ConnectionWrap");
         pg_conn.write().await
     }
 }
 
-impl<'c> Acquire<'c> for &'c mut ConnectionWrapInner {
-    type Database = Postgres;
+impl<DB: Database> Deref for ConnectionWrapInner<DB> {
+    type Target = DB::Connection;
 
-    type Connection = &'c mut PgConnection;
-
-    fn acquire(self) -> BoxFuture<'c, sqlx::Result<Self::Connection>> {
+    fn deref(&self) -> &Self::Target {
         match self {
-            ConnectionWrapInner::Plain(c) => c.acquire(),
-            ConnectionWrapInner::Transacting(c) => c.acquire(),
-        }
-    }
-
-    fn begin(self) -> BoxFuture<'c, sqlx::Result<Transaction<'c, Postgres>>> {
-        match self {
-            ConnectionWrapInner::Plain(c) => c.begin(),
-            ConnectionWrapInner::Transacting(c) => c.begin(),
+            ConnectionWrapInner::Plain(c) => c,
+            ConnectionWrapInner::Transacting(c) => c,
         }
     }
 }
 
-impl<'c> Executor<'c> for &'c mut ConnectionWrapInner {
-    type Database = Postgres;
-
-    fn fetch_many<'e, 'q: 'e, E: 'q>(
-        self,
-        query: E,
-    ) -> BoxStream<'e, sqlx::Result<Either<PgDone, PgRow>>>
-    where
-        'c: 'e,
-        E: Execute<'q, Self::Database>,
-    {
+impl<DB: Database> DerefMut for ConnectionWrapInner<DB> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
-            ConnectionWrapInner::Plain(c) => c.fetch_many(query),
-            ConnectionWrapInner::Transacting(c) => c.fetch_many(query),
-        }
-    }
-
-    fn fetch_optional<'e, 'q: 'e, E: 'q>(
-        self,
-        query: E,
-    ) -> BoxFuture<'e, sqlx::Result<Option<PgRow>>>
-    where
-        'c: 'e,
-        E: Execute<'q, Self::Database>,
-    {
-        match self {
-            ConnectionWrapInner::Plain(c) => c.fetch_optional(query),
-            ConnectionWrapInner::Transacting(c) => c.fetch_optional(query),
-        }
-    }
-
-    fn prepare_with<'e, 'q: 'e>(
-        self,
-        sql: &'q str,
-        parameters: &'e [PgTypeInfo],
-    ) -> BoxFuture<'e, sqlx::Result<<Self::Database as HasStatement<'q>>::Statement>>
-    where
-        'c: 'e,
-    {
-        match self {
-            ConnectionWrapInner::Plain(c) => c.prepare_with(sql, parameters),
-            ConnectionWrapInner::Transacting(c) => c.prepare_with(sql, parameters),
-        }
-    }
-
-    #[doc(hidden)]
-    fn describe<'e, 'q: 'e>(
-        self,
-        sql: &'q str,
-    ) -> BoxFuture<'e, sqlx::Result<Describe<Self::Database>>>
-    where
-        'c: 'e,
-    {
-        match self {
-            ConnectionWrapInner::Plain(c) => c.describe(sql),
-            ConnectionWrapInner::Transacting(c) => c.describe(sql),
+            ConnectionWrapInner::Plain(c) => c,
+            ConnectionWrapInner::Transacting(c) => c,
         }
     }
 }

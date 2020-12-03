@@ -22,10 +22,10 @@ features = [ "rustls" ]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
+default = ["rustls", "postgres"]
 docs = ["rustls"]
 
 # database
-any = [ "sqlx/any" ]
 postgres = [ "sqlx/postgres"]
 mysql = [ "sqlx/mysql" ]
 sqlite = [ "sqlx/sqlite" ]
@@ -37,12 +37,7 @@ rustls = [ "sqlx/runtime-async-std-rustls" ]
 
 [dependencies]
 async-std = "1.7.0"
-either = "1.6.1"
-futures-core = "0.3.8"
-
-[dependencies.sqlx]
-version = "0.4.1"
-features = ["postgres"]
+sqlx = "0.4.1"
 
 [dependencies.tide]
 version = "0.15.0"
