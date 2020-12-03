@@ -22,10 +22,10 @@ jobs:
     - uses: actions/checkout@master
 
     - name: check
-      run: cargo check --workspace --benches --bins --examples --tests --features=docs
+      run: cargo check --workspace --benches --bins --examples --tests --features=test
 
     - name: tests
-      run: cargo test --all --features=docs
+      run: cargo test --all --features=test
       env:
         RUST_BACKTRACE: short
 
@@ -36,11 +36,14 @@ jobs:
     steps:
     - uses: actions/checkout@master
 
+    - name: install nightly
+      run: rustup toolchain install nightly
+
     - name: clippy
-      run: cargo clippy --workspace --benches --bins --examples --tests --features=docs
+      run: cargo clippy --workspace --benches --bins --examples --tests --features=test
 
     - name: fmt
       run: cargo fmt --all -- --check
 
     - name: docs
-      run: cargo doc --no-deps
+      run: cargo +nightly doc --no-deps

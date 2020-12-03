@@ -24,6 +24,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = ["rustls"]
 docs = ["rustls", "postgres"]
+test = ["rustls", "postgres"]
 
 # database
 any = ["sqlx/any"]

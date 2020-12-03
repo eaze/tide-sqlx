@@ -92,7 +92,7 @@ use tide::utils::async_trait;
 use tide::{http::Method, Middleware, Next, Request, Result};
 
 #[cfg(all(test, not(feature = "postgres")))]
-compile_error!("The tests must be run with --features=postgres");
+compile_error!("The tests must be run with --features=test");
 
 #[cfg(feature = "postgres")]
 #[cfg_attr(feature = "docs", doc(cfg(feature = "postgres")))]
