@@ -57,15 +57,20 @@ use tide::{http::Method, Middleware, Next, Request, Result};
 compile_error!("The tests must be run with --features=postgres");
 
 #[doc(hidden)]
-pub enum ConnectionWrapInner<DB: Database> {
+pub enum ConnectionWrapInner<DB>
+where
+    DB: Database,
+    DB::Connection: Send + Sync + 'static,
+{
     Transacting(Transaction<'static, DB>),
     Plain(PoolConnection<DB>),
 }
 
-unsafe impl<DB: Database> Send for ConnectionWrapInner<DB> {}
-unsafe impl<DB: Database> Sync for ConnectionWrapInner<DB> {}
-
-impl<DB: Database> Debug for ConnectionWrapInner<DB> {
+impl<DB> Debug for ConnectionWrapInner<DB>
+where
+    DB: Database,
+    DB::Connection: Send + Sync + 'static,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Transacting(_) => f.debug_struct("ConnectionWrapInner::Transacting").finish(),
@@ -74,7 +79,11 @@ impl<DB: Database> Debug for ConnectionWrapInner<DB> {
     }
 }
 
-impl<DB: Database> Deref for ConnectionWrapInner<DB> {
+impl<DB> Deref for ConnectionWrapInner<DB>
+where
+    DB: Database,
+    DB::Connection: Send + Sync + 'static,
+{
     type Target = DB::Connection;
 
     fn deref(&self) -> &Self::Target {
@@ -85,7 +94,11 @@ impl<DB: Database> Deref for ConnectionWrapInner<DB> {
     }
 }
 
-impl<DB: Database> DerefMut for ConnectionWrapInner<DB> {
+impl<DB> DerefMut for ConnectionWrapInner<DB>
+where
+    DB: Database,
+    DB::Connection: Send + Sync + 'static,
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         match self {
             ConnectionWrapInner::Plain(c) => c,
@@ -134,11 +147,19 @@ pub type ConnectionWrap<DB> = Arc<RwLock<ConnectionWrapInner<DB>>>;
 ///
 /// [tide::Request]: https://docs.rs/tide/0.15.0/tide/struct.Request.html
 #[derive(Debug, Clone)]
-pub struct SQLxMiddleware<DB: Database> {
+pub struct SQLxMiddleware<DB>
+where
+    DB: Database,
+    DB::Connection: Send + Sync + 'static,
+{
     pool: Pool<DB>,
 }
 
-impl<DB: Database> SQLxMiddleware<DB> {
+impl<DB> SQLxMiddleware<DB>
+where
+    DB: Database,
+    DB::Connection: Send + Sync + 'static,
+{
     /// Create a new instance of `SQLxMiddleware`.
     pub async fn new(
         pgurl: &'_ str,
@@ -172,7 +193,12 @@ impl<DB: Database> SQLxMiddleware<DB> {
 // and so the `SQLxRequestExt` extension trait exists to make that nicer.
 
 #[async_trait]
-impl<State: Clone + Send + Sync + 'static, DB: Database> Middleware<State> for SQLxMiddleware<DB> {
+impl<State, DB> Middleware<State> for SQLxMiddleware<DB>
+where
+    State: Clone + Send + Sync + 'static,
+    DB: Database,
+    DB::Connection: Send + Sync + 'static,
+{
     async fn handle(&self, mut req: Request<State>, next: Next<'_, State>) -> Result {
         // Dual-purpose: Avoid ever running twice, or pick up a test connection if one exists.
         //
@@ -260,9 +286,10 @@ pub trait SQLxRequestExt {
     /// # Ok(())
     /// # }
     /// ```
-    async fn sqlx_conn<'req, DB: Database>(
-        &'req self,
-    ) -> RwLockWriteGuard<'req, ConnectionWrapInner<DB>>;
+    async fn sqlx_conn<'req, DB>(&'req self) -> RwLockWriteGuard<'req, ConnectionWrapInner<DB>>
+    where
+        DB: Database,
+        DB::Connection: Send + Sync + 'static;
 }
 
 #[async_trait]
@@ -270,6 +297,7 @@ impl<T: Send + Sync + 'static> SQLxRequestExt for Request<T> {
     async fn sqlx_conn<'req, DB>(&'req self) -> RwLockWriteGuard<'req, ConnectionWrapInner<DB>>
     where
         DB: Database,
+        DB::Connection: Send + Sync + 'static,
     {
         let sqlx_conn: &ConnectionWrap<DB> = self
             .ext()
