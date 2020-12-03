@@ -53,6 +53,9 @@ use sqlx::{Database, Transaction};
 use tide::utils::async_trait;
 use tide::{http::Method, Middleware, Next, Request, Result};
 
+#[cfg(all(test, not(feature = "postgres")))]
+compile_error!("The tests must be run with --features=postgres");
+
 #[doc(hidden)]
 pub enum ConnectionWrapInner<DB: Database> {
     Transacting(Transaction<'static, DB>),
