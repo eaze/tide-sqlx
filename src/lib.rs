@@ -74,6 +74,26 @@ impl<DB: Database> Debug for ConnectionWrapInner<DB> {
     }
 }
 
+impl<DB: Database> Deref for ConnectionWrapInner<DB> {
+    type Target = DB::Connection;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            ConnectionWrapInner::Plain(c) => c,
+            ConnectionWrapInner::Transacting(c) => c,
+        }
+    }
+}
+
+impl<DB: Database> DerefMut for ConnectionWrapInner<DB> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            ConnectionWrapInner::Plain(c) => c,
+            ConnectionWrapInner::Transacting(c) => c,
+        }
+    }
+}
+
 #[doc(hidden)]
 pub type ConnectionWrap<DB> = Arc<RwLock<ConnectionWrapInner<DB>>>;
 
@@ -255,25 +275,5 @@ impl<T: Send + Sync + 'static> SQLxRequestExt for Request<T> {
             .ext()
             .expect("You must install SQLx middleware providing ConnectionWrap");
         sqlx_conn.write().await
-    }
-}
-
-impl<DB: Database> Deref for ConnectionWrapInner<DB> {
-    type Target = DB::Connection;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            ConnectionWrapInner::Plain(c) => c,
-            ConnectionWrapInner::Transacting(c) => c,
-        }
-    }
-}
-
-impl<DB: Database> DerefMut for ConnectionWrapInner<DB> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            ConnectionWrapInner::Plain(c) => c,
-            ConnectionWrapInner::Transacting(c) => c,
-        }
     }
 }
