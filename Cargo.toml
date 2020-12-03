@@ -18,22 +18,22 @@ categories = [
 ]
 
 [package.metadata.docs.rs]
-features = [ "rustls" ]
+features = ["docs"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["rustls", "postgres"]
-docs = ["rustls"]
+default = ["rustls"]
+docs = ["rustls", "postgres"]
 
 # database
-postgres = [ "sqlx/postgres"]
-mysql = [ "sqlx/mysql" ]
-sqlite = [ "sqlx/sqlite" ]
-mssql = [ "sqlx/mssql" ]
+postgres = ["sqlx/postgres"]
+mysql = ["sqlx/mysql"]
+sqlite = ["sqlx/sqlite"]
+mssql = ["sqlx/mssql"]
 
 # tls implementation
-native-tls = [ "sqlx/runtime-async-std-native-tls" ]
-rustls = [ "sqlx/runtime-async-std-rustls" ]
+native-tls = ["sqlx/runtime-async-std-native-tls"]
+rustls = ["sqlx/runtime-async-std-rustls"]
 
 [dependencies]
 async-std = "1.7.0"
