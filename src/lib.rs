@@ -1,10 +1,10 @@
-//! A [Tide][] middleware which holds a pool of postgres connections, and automatically hands
-//! each [tide::Request][] a connection, which may transparently be either a postgres transaction,
-//! or a direct pooled connection.
+//! A [Tide][] middleware which holds a pool of SQLx database connections, and automatically hands
+//! each [tide::Request][] a connection, which may transparently be either a database transaction,
+//! or a direct pooled database connection.
 //!
-//! By default, transactions are used for all http methods other than GET and HEAD.
+//! By default, transactions are used for all http methods other than `GET` and `HEAD`.
 //!
-//! When using this, use the `PostgresRequestExt` extenstion trait to get the connection.
+//! When using this, use the `SQLxRequestExt` extenstion trait to get the connection.
 //!
 //! ## Example
 //!
@@ -35,7 +35,7 @@
 //!
 //! ## Why you may want to use this
 //!
-//! Postgres transactions are very useful because they allow easy, assured rollback if something goes wrong.
+//! Database transactions are very useful because they allow easy, assured rollback if something goes wrong.
 //! However, transactions incur extra runtime cost which is too expensive to justify for READ operations that _do not need_ this behavior.
 //!
 //! In order to allow transactions to be used seamlessly in endpoints, this middleware manages a transaction if one is deemed desirable.
@@ -77,13 +77,13 @@ impl<DB: Database> Debug for ConnectionWrapInner<DB> {
 #[doc(hidden)]
 pub type ConnectionWrap<DB> = Arc<RwLock<ConnectionWrapInner<DB>>>;
 
-/// This middleware holds a pool of postgres connections, and automatically hands each
-/// [tide::Request][] a connection, which may transparently be either a postgres transaction,
-/// or a direct pooled connection.
+/// This middleware holds a pool of SQLx database connections, and automatically hands each
+/// [tide::Request][] a connection, which may transparently be either a database transaction,
+/// or a direct pooled database connection.
 ///
-/// By default, transactions are used for all http methods other than GET and HEAD.
+/// By default, transactions are used for all http methods other than `GET` and `HEAD`.
 ///
-/// When using this, use the `PostgresRequestExt` extenstion trait to get the connection.
+/// When using this, use the `SQLxRequestExt` extenstion trait to get the connection.
 ///
 /// ## Example
 ///
@@ -137,19 +137,19 @@ impl<DB: Database> SQLxMiddleware<DB> {
 // Rust does not allow this due to exponential fat-pointer table size.
 // See https://doc.rust-lang.org/error-index.html#method-has-generic-type-parameters for more information.
 //
-// In order to get a concrete type for both which we can implement RefExecutor on, we make an enum with multiple types.
+// In order to get a concrete type for both which we can deref to a `Connection` on, we make an enum with multiple types.
 // The types must be concrete and non-generic because the outer type much be fetchable from `Request::ext`, which is a typemap.
 //
 // The type of the enum must be in an `Arc` because we want to be able to tell it to commit at the end of the middleware
 // once we've gotten a response back. This is because anything in `Request::ext` is lost in the endpoint without manual movement
-// to the `Response`. Tide may someday be able to do this automatically but not as of 0.14. An `Arc` is the correct choice to keep
+// to the `Response`. Tide may someday be able to do this automatically but not as of 0.15. An `Arc` is the correct choice to keep
 // something between mutltiple owned contexts over a threaded futures executor.
 //
 // However interior mutability (`RwLock`) is also required because `Acquire` requires mutable self reference,
 // requiring that we gain mutable lock from the `Arc`, which is not possible with an `Arc` alone.
 //
 // This makes using the extention of the request somewhat awkward, because it needs to be unwrapped into a `RwLockWriteGuard`,
-// and so the `PostgresRequestExt` extension trait exists to make that nicer.
+// and so the `SQLxRequestExt` extension trait exists to make that nicer.
 
 #[async_trait]
 impl<State: Clone + Send + Sync + 'static, DB: Database> Middleware<State> for SQLxMiddleware<DB> {
@@ -206,12 +206,12 @@ impl<State: Clone + Send + Sync + 'static, DB: Database> Middleware<State> for S
 /// [tide::Request]: https://docs.rs/tide/0.15.0/tide/struct.Request.html
 #[async_trait]
 pub trait SQLxRequestExt {
-    /// Get the postgres connection for the current Request.
+    /// Get the SQLx connection for the current Request.
     ///
     /// This will return a "write" guard from a read-write lock.
     /// Under the hood this will transparently be either a postgres transaction or a direct pooled connection.
     ///
-    /// This will panic with an expect message if the `PostgresConnectionMiddleware` has not been run.
+    /// This will panic with an expect message if the `SQLxMiddleware` has not been run.
     ///
     /// ## Example
     ///
@@ -245,21 +245,16 @@ pub trait SQLxRequestExt {
     ) -> RwLockWriteGuard<'req, ConnectionWrapInner<DB>>;
 }
 
-// postgres = [ "sqlx/postgres"]
-// mysql = [ "sqlx/mysql" ]
-// sqlite = [ "sqlx/sqlite" ]
-// mssql = [ "sqlx/mssql" ]
-
 #[async_trait]
 impl<T: Send + Sync + 'static> SQLxRequestExt for Request<T> {
     async fn sqlx_conn<'req, DB>(&'req self) -> RwLockWriteGuard<'req, ConnectionWrapInner<DB>>
     where
         DB: Database,
     {
-        let pg_conn: &ConnectionWrap<DB> = self
+        let sqlx_conn: &ConnectionWrap<DB> = self
             .ext()
             .expect("You must install SQLx middleware providing ConnectionWrap");
-        pg_conn.write().await
+        sqlx_conn.write().await
     }
 }
 
