@@ -26,10 +26,8 @@ default = ["rustls"]
 docs = ["rustls", "postgres"]
 
 # database
+any = ["sqlx/any"]
 postgres = ["sqlx/postgres"]
-mysql = ["sqlx/mysql"]
-sqlite = ["sqlx/sqlite"]
-mssql = ["sqlx/mssql"]
 
 # tls implementation
 native-tls = ["sqlx/runtime-async-std-native-tls"]

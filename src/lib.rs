@@ -79,6 +79,8 @@
 //! [tide::Request]: https://docs.rs/tide/0.15.0/tide/struct.Request.html
 //! [Tide]: https://docs.rs/tide/0.15.0/tide/
 
+#![cfg_attr(feature = "docs", feature(doc_cfg))]
+
 use std::fmt::{self, Debug};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -91,6 +93,11 @@ use tide::{http::Method, Middleware, Next, Request, Result};
 
 #[cfg(all(test, not(feature = "postgres")))]
 compile_error!("The tests must be run with --features=postgres");
+
+#[cfg(feature = "postgres")]
+#[cfg_attr(feature = "docs", doc(cfg(feature = "postgres")))]
+/// Helpers specific to Postgres
+pub mod postgres;
 
 #[doc(hidden)]
 pub enum ConnectionWrapInner<DB>
