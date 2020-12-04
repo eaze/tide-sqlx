@@ -6,8 +6,9 @@
 //!
 //! When using this, use the `SQLxRequestExt` extenstion trait to get the connection.
 //!
-//! ## Example
+//! ## Examples
 //!
+//! ### Basic
 //! ```no_run
 //! # #[async_std::main]
 //! # async fn main() -> anyhow::Result<()> {
@@ -18,7 +19,42 @@
 //! use tide_sqlx::SQLxRequestExt;
 //!
 //! let mut app = tide::new();
-//! app.with(SQLxMiddleware::<Postgres>::new("postgres://localhost/geolocality", 5).await?);
+//! app.with(SQLxMiddleware::<Postgres>::new("postgres://localhost/a_database").await?);
+//!
+//! app.at("/").post(|req: tide::Request<()>| async move {
+//!     let mut pg_conn = req.sqlx_conn::<Postgres>().await;
+//!
+//!     sqlx::query("SELECT * FROM users")
+//!         .fetch_optional(pg_conn.acquire().await?)
+//!         .await;
+//!
+//!     Ok("")
+//! });
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### From sqlx `PoolOptions` and with `ConnectOptions`
+//! ```no_run
+//! # #[async_std::main]
+//! # async fn main() -> anyhow::Result<()> {
+//! use log::LevelFilter;
+//! use sqlx::{Acquire, ConnectOptions}; // Or sqlx::prelude::*;
+//! use sqlx::postgres::{PgConnectOptions, PgPoolOptions, Postgres};
+//!
+//! use tide_sqlx::SQLxMiddleware;
+//! use tide_sqlx::SQLxRequestExt;
+//!
+//! let mut connect_opts = PgConnectOptions::new();
+//! connect_opts.log_statements(LevelFilter::Debug);
+//!
+//! let pg_pool = PgPoolOptions::new()
+//!     .max_connections(5)
+//!     .connect_with(connect_opts)
+//!     .await?;
+//!
+//! let mut app = tide::new();
+//! app.with(SQLxMiddleware::from(pg_pool));
 //!
 //! app.at("/").post(|req: tide::Request<()>| async move {
 //!     let mut pg_conn = req.sqlx_conn::<Postgres>().await;
@@ -48,7 +84,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 use async_std::sync::{RwLock, RwLockWriteGuard};
-use sqlx::pool::{Pool, PoolConnection, PoolOptions};
+use sqlx::pool::{Pool, PoolConnection};
 use sqlx::{Database, Transaction};
 use tide::utils::async_trait;
 use tide::{http::Method, Middleware, Next, Request, Result};
@@ -130,7 +166,7 @@ pub type ConnectionWrap<DB> = Arc<RwLock<ConnectionWrapInner<DB>>>;
 /// use tide_sqlx::SQLxRequestExt;
 ///
 /// let mut app = tide::new();
-/// app.with(SQLxMiddleware::<Postgres>::new("postgres://localhost/a_database", 5).await?);
+/// app.with(SQLxMiddleware::<Postgres>::new("postgres://localhost/a_database").await?);
 ///
 /// app.at("/").post(|req: tide::Request<()>| async move {
 ///     let mut pg_conn = req.sqlx_conn::<Postgres>().await;
@@ -161,15 +197,20 @@ where
     DB::Connection: Send + Sync + 'static,
 {
     /// Create a new instance of `SQLxMiddleware`.
-    pub async fn new(
-        pgurl: &'_ str,
-        max_connections: u32,
-    ) -> std::result::Result<Self, sqlx::Error> {
-        let pool: Pool<DB> = PoolOptions::new()
-            .max_connections(max_connections)
-            .connect(pgurl)
-            .await?;
+    pub async fn new(pgurl: &'_ str) -> std::result::Result<Self, sqlx::Error> {
+        let pool: Pool<DB> = Pool::connect(pgurl).await?;
         Ok(Self { pool })
+    }
+}
+
+impl<DB> From<Pool<DB>> for SQLxMiddleware<DB>
+where
+    DB: Database,
+    DB::Connection: Send + Sync + 'static,
+{
+    /// Create a new instance of `SQLxMiddleware` from a `sqlx::Pool`.
+    fn from(pool: Pool<DB>) -> Self {
+        Self { pool }
     }
 }
 
@@ -268,7 +309,7 @@ pub trait SQLxRequestExt {
     /// # use sqlx::postgres::Postgres;
     /// #
     /// # let mut app = tide::new();
-    /// # app.with(SQLxMiddleware::<Postgres>::new("postgres://localhost/a_database", 5).await?);
+    /// # app.with(SQLxMiddleware::<Postgres>::new("postgres://localhost/a_database").await?);
     /// #
     /// use sqlx::Acquire; // Or sqlx::prelude::*;
     ///
