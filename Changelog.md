@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2020-12-03
+
+- Docs: updated readme for 0.3.x apis & examples.
+
 ## [0.3.0] - 2020-12-03
 
-This relase adds the ability to be generic over any SQLx database (except Sqlite, which is `!Sync`).
+This release adds the ability to be generic over any SQLx database _(except Sqlite, which is `!Sync`)_.
 
 - Changed `PostgresConnectionMiddleware` to `SQLxMiddleware<DB>`.
 - Changed `PostgresRequestExt` to `SQLxRequestExt`.
