@@ -7,13 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2020-12-03
+
+This relase adds the ability to be generic over any SQLx database (except Sqlite, which is `!Sync`).
+
+- Changed `PostgresConnectionMiddleware` to `SQLxMiddleware<DB>`.
+- Changed `PostgresRequestExt` to `SQLxRequestExt`.
+- `ConnectionWrapInner` no longer implements `Acquire` and `Executor`, but now implements `DerefMut`.
+- Added `From<Pool<DB>> for SQLxMiddleware`.
+- Added `postgres` submodule with helpers similar to the old 0.1.x api.
+
 ## [0.2.5] - 2020-11-19
 
 - Deps: `default-features = false` for Tide.
 
 ## [0.2.4] - 2020-11-18
 
-- Fix: properly expose `postgress_conn()` from `PostgresRequestExt`.
+- Fix: properly expose `pg_conn()` from `PostgresRequestExt`.
 
 ## [0.2.3] - 2020-11-18
 
