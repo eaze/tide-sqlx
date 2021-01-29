@@ -39,7 +39,7 @@ async-std = "1.7.0"
 sqlx = "0.4.1"
 
 [dependencies.tide]
-version = "0.15.0"
+version = "0.16.0"
 default-features = false
 
 # Dev-deps
