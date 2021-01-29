@@ -22,7 +22,7 @@ features = ["docs"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["rustls"]
+default = []
 docs = ["rustls", "postgres"]
 test = ["rustls", "postgres"]
 
