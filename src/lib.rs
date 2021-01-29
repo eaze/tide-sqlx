@@ -88,8 +88,14 @@ use std::sync::Arc;
 use async_std::sync::{RwLock, RwLockWriteGuard};
 use sqlx::pool::{Pool, PoolConnection};
 use sqlx::{Database, Transaction};
+use tide::http::Method;
 use tide::utils::async_trait;
-use tide::{http::Method, Middleware, Next, Request, Result};
+use tide::{Middleware, Next, Request, Result};
+
+#[cfg(feature = "unsafe-nested-transactions")]
+use sqlx::Connection;
+#[cfg(feature = "unsafe-nested-transactions")]
+use tide::http;
 
 #[cfg(all(test, not(feature = "postgres")))]
 compile_error!("The tests must be run with --features=test");
@@ -248,15 +254,6 @@ where
     DB::Connection: Send + Sync + 'static,
 {
     async fn handle(&self, mut req: Request<State>, next: Next<'_, State>) -> Result {
-        // Dual-purpose: Avoid ever running twice, or pick up a test connection if one exists.
-        //
-        // TODO(Fishrock): implement recursive depth transactions.
-        //   SQLx 0.4 Transactions which are recursive carry a Borrow to the containing Transaction.
-        //   Blocked by language feature for Tide - Request extensions cannot hold Borrows.
-        if req.ext::<ConnectionWrap<DB>>().is_some() {
-            return Ok(next.run(req).await);
-        }
-
         // TODO(Fishrock): Allow this to be overridden somehow. Maybe check part of the path.
         let is_safe = match req.method() {
             Method::Get => true,
@@ -264,7 +261,50 @@ where
             _ => false,
         };
 
-        let conn_wrap_inner = if is_safe {
+        let conn_wrap_inner = if req.ext::<ConnectionWrap<DB>>().is_some() {
+            #[cfg(feature = "unsafe-nested-transactions")]
+            {
+                let inner_req: &mut http::Request = req.as_mut();
+                let conn_wrap = inner_req
+                    .ext_mut()
+                    .remove::<ConnectionWrap<DB>>()
+                    .expect("This was literally just checked.");
+                let mut sqlx_conn = conn_wrap.write().await;
+
+                let nested_trans = sqlx_conn.begin().await?;
+
+                // UNSAFE.
+                //
+                // Rust is presently unable to express the guarentees we need here.
+                //
+                // Tide is meant to run on Async-Std, which uses a _threaded futures executor_.
+                // A threaded futures executor requires that all Futures be `Send`, so that they can be sent across thread bounadries.
+                // `Send` implies that any lifetimes must be `'static`. This is actually the limitation in Rust.
+                // Why `'static'` is implied is answered here: https://stackoverflow.com/a/26783347
+                // In short:
+                // `Send` implies that said object carries no reference to the current thread stack.
+                // If an object has no reference to the current stack, its lifetime bound is `'static`.
+                //
+                // However Rust already has to ensure that other Futures scopes outlive inner futures scopes even in the case of a threaded executor.
+                // So in this case `Send` could theoretically hold a lifetime of an outer scope and still be sound.
+                // In practice, async closures, once implemented by the language, will have to do exactly this same thing to work with threaded executors.
+                // When that happens and Tide moves to being able to use async closures, this will no longer be useful, thankfully.
+                //
+                // So, since Rust already enforces most of the memory safety we'd need anyways, this should be "safe" to do.
+                //
+                // Also, storing anything attached from middleware is already going to cause panics regardless, because that would mean an `Arc` would be unwrapped twice.
+                // This lifetime nonsense is of course still worse in that you may not immediately panic but will suffer from arbitrary memory corruption.
+                unsafe {
+                    ConnectionWrapInner::Transacting(extend_transaction_lifetime(nested_trans))
+                }
+                // End unsafe.
+            }
+            #[cfg(not(feature = "unsafe-nested-transactions"))]
+            {
+                // Dual-purpose: Avoid ever running twice, or pick up a test connection if one exists.
+                return Ok(next.run(req).await);
+            }
+        } else if is_safe {
             ConnectionWrapInner::Plain(self.pool.acquire().await?)
         } else {
             ConnectionWrapInner::Transacting(self.pool.begin().await?)
@@ -352,4 +392,23 @@ impl<T: Send + Sync + 'static> SQLxRequestExt for Request<T> {
             .expect("You must install SQLx middleware providing ConnectionWrap");
         sqlx_conn.write().await
     }
+}
+
+/// EXTREMELY UNSAFE. MAY LEAD TO MEMORY CORRUPTION.
+///
+/// See https://doc.rust-lang.org/std/mem/fn.transmute.html for more information.
+///
+/// This is made even more unsafe than just `transmute<'a, 'static>` because `sqlx::Transaction` has an enum internally,
+/// which does not have a known size, and so `transmute_copy` is required even though we aren't changing the enum varient internally.
+/// Presumably this is a limitation of Rust that may be solved in the future.
+///
+/// See https://doc.rust-lang.org/std/mem/fn.transmute_copy.html for even more specific information.
+#[cfg(feature = "unsafe-nested-transactions")]
+unsafe fn extend_transaction_lifetime<'c, DB>(
+    transaction: Transaction<'c, DB>,
+) -> Transaction<'static, DB>
+where
+    DB: Database,
+{
+    std::mem::transmute_copy::<Transaction<'c, DB>, Transaction<'static, DB>>(&transaction)
 }

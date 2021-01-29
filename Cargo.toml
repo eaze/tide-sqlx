@@ -22,9 +22,11 @@ features = ["docs"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["rustls"]
+default = ["rustls", "test"]
 docs = ["rustls", "postgres"]
-test = ["rustls", "postgres"]
+test = ["rustls", "postgres", "unsafe-nested-transactions"]
+
+unsafe-nested-transactions = []
 
 # database
 any = ["sqlx/any"]
