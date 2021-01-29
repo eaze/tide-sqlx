@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Change: No longer enables `"rustls"` by default.
+- Deps: Updated to Tide 0.16
+
 ## [0.3.1] - 2020-12-03
 
 - Docs: updated readme for 0.3.x apis & examples.
