@@ -36,7 +36,7 @@ rustls = ["sqlx/runtime-async-std-rustls"]
 
 [dependencies]
 async-std = "1.7.0"
-sqlx = "0.4.1"
+sqlx = "0.5.1"
 
 [dependencies.tide]
 version = "0.16.0"
