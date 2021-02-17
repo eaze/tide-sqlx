@@ -35,21 +35,21 @@ native-tls = ["sqlx/runtime-async-std-native-tls"]
 rustls = ["sqlx/runtime-async-std-rustls"]
 
 [dependencies]
-async-std = "1.7.0"
-sqlx = "0.4.1"
+async-std = "1"
+sqlx = "0.4"
 
 [dependencies.tide]
-version = "0.16.0"
+version = "0.16"
 default-features = false
 
 # Dev-deps
 
 [dev-dependencies]
-anyhow = "1.0.34"
-log = "0.4.11"
+anyhow = "1"
+log = "0.4"
 
 [dev-dependencies.async-std]
-version = "1.7.0"
+version = "1"
 features = ["attributes"]
 
 [dev-dependencies.cargo-husky]
