@@ -258,11 +258,7 @@ where
         }
 
         // TODO(Fishrock): Allow this to be overridden somehow. Maybe check part of the path.
-        let is_safe = match req.method() {
-            Method::Get => true,
-            Method::Head => true,
-            _ => false,
-        };
+        let is_safe = matches!(req.method(), Method::Get | Method::Head);
 
         let conn_wrap_inner = if is_safe {
             ConnectionWrapInner::Plain(self.pool.acquire().await?)
