@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2021-01-29
+
+- Deps: Relaxed dependency version constraints.
+
+## [0.4.0] - 2021-01-29
+
 - Change: No longer enables `"rustls"` by default.
 - Deps: Updated to Tide 0.16
 
