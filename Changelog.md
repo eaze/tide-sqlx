@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2021-03-22
+
+This release adds integration with the `tracing` crate ecosystem.
+
+- Added `tracing` feature.
+
 ## [0.5.0] - 2021-02-23
 
 - Deps: updated to sqlx 0.5
