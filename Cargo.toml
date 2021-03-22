@@ -24,7 +24,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = []
 docs = ["rustls", "postgres"]
-test = ["rustls", "postgres"]
+test = ["rustls", "postgres", "tracing"]
+
+tracing = ["tracing_crate", "tracing-futures"]
 
 # database
 any = ["sqlx/any"]
@@ -37,6 +39,15 @@ rustls = ["sqlx/runtime-async-std-rustls"]
 [dependencies]
 async-std = "1"
 sqlx = "0.5"
+
+[dependencies.tracing_crate]
+version = "0.1"
+optional = true
+package = "tracing"
+
+[dependencies.tracing-futures]
+version = "0.2"
+optional = true
 
 [dependencies.tide]
 version = "0.16"

@@ -91,6 +91,9 @@ use sqlx::{Database, Transaction};
 use tide::utils::async_trait;
 use tide::{http::Method, Middleware, Next, Request, Result};
 
+#[cfg(feature = "tracing")]
+use tracing_crate::{info_span, Instrument};
+
 #[cfg(all(test, not(feature = "postgres")))]
 compile_error!("The tests must be run with --features=test");
 
@@ -261,9 +264,16 @@ where
         let is_safe = matches!(req.method(), Method::Get | Method::Head);
 
         let conn_wrap_inner = if is_safe {
-            ConnectionWrapInner::Plain(self.pool.acquire().await?)
+            let conn_fut = self.pool.acquire();
+            #[cfg(feature = "tracing")]
+            let conn_fut = conn_fut.instrument(info_span!("Acquiring database connection"));
+            ConnectionWrapInner::Plain(conn_fut.await?)
         } else {
-            ConnectionWrapInner::Transacting(self.pool.begin().await?)
+            let conn_fut = self.pool.begin();
+            #[cfg(feature = "tracing")]
+            let conn_fut =
+                conn_fut.instrument(info_span!("Acquiring database transaction", "COMMIT"));
+            ConnectionWrapInner::Transacting(conn_fut.await?)
         };
         let conn_wrap = Arc::new(RwLock::new(conn_wrap_inner));
         req.set_ext(conn_wrap.clone());
@@ -274,7 +284,11 @@ where
             if let Ok(conn_wrap_inner) = Arc::try_unwrap(conn_wrap) {
                 if let ConnectionWrapInner::Transacting(connection) = conn_wrap_inner.into_inner() {
                     // if we errored, sqlx::Transaction calls rollback on Drop.
-                    connection.commit().await?;
+                    let commit_fut = connection.commit();
+                    #[cfg(feature = "tracing")]
+                    let commit_fut = commit_fut
+                        .instrument(info_span!("Commiting database transaction", "COMMIT"));
+                    commit_fut.await?;
                 }
             } else {
                 // If this is hit, it is likely that an http_types (surf::http / tide::http) Request has been kept alive and was not consumed.
@@ -346,6 +360,10 @@ impl<T: Send + Sync + 'static> SQLxRequestExt for Request<T> {
         let sqlx_conn: &ConnectionWrap<DB> = self
             .ext()
             .expect("You must install SQLx middleware providing ConnectionWrap");
-        sqlx_conn.write().await
+        let rwlock_fut = sqlx_conn.write();
+        #[cfg(feature = "tracing")]
+        let rwlock_fut =
+            rwlock_fut.instrument(info_span!("Database connection RwLockWriteGuard acquire"));
+        rwlock_fut.await
     }
 }

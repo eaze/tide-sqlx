@@ -4,6 +4,9 @@ use tide::Request;
 
 use sqlx::postgres::Postgres;
 
+#[cfg(feature = "tracing")]
+use tracing_crate::{info_span, Instrument};
+
 use crate::{ConnectionWrap, ConnectionWrapInner, SQLxMiddleware};
 
 /// An alias for `tide_sqlx::SQLxMiddleware<Postgres>`.
@@ -63,6 +66,10 @@ impl<T: Send + Sync + 'static> PostgresRequestExt for Request<T> {
         let pg_conn: &ConnectionWrap<Postgres> = self
             .ext()
             .expect("You must install SQLx middleware providing Postgres ConnectionWrap");
-        pg_conn.write().await
+        let rwlock_fut = pg_conn.write();
+        #[cfg(feature = "tracing")]
+        let rwlock_fut =
+            rwlock_fut.instrument(info_span!("Postgres connection RwLockWriteGuard acquire"));
+        rwlock_fut.await
     }
 }
