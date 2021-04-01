@@ -79,6 +79,7 @@
 //! [tide::Request]: https://docs.rs/tide/0.15.0/tide/struct.Request.html
 //! [Tide]: https://docs.rs/tide/0.15.0/tide/
 
+#![allow(clippy::upper_case_acronyms)] // SQLxMiddleware
 #![cfg_attr(feature = "docs", feature(doc_cfg))]
 
 use std::fmt::{self, Debug};
