@@ -213,6 +213,16 @@ where
     }
 }
 
+impl<DB> AsRef<Pool<DB>> for SQLxMiddleware<DB>
+where
+    DB: Database,
+    DB::Connection: Send + Sync + 'static,
+{
+    fn as_ref(&self) -> &Pool<DB> {
+        &self.pool
+    }
+}
+
 impl<DB> From<Pool<DB>> for SQLxMiddleware<DB>
 where
     DB: Database,
