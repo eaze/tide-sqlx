@@ -92,6 +92,8 @@ use sqlx::{Database, Transaction};
 use tide::utils::async_trait;
 use tide::{http::Method, Middleware, Next, Request, Result};
 
+#[cfg(all(feature = "tracing", debug_assertions))]
+use tracing_crate::debug_span;
 #[cfg(feature = "tracing")]
 use tracing_crate::{info_span, Instrument};
 
@@ -372,9 +374,9 @@ impl<T: Send + Sync + 'static> SQLxRequestExt for Request<T> {
             .ext()
             .expect("You must install SQLx middleware providing ConnectionWrap");
         let rwlock_fut = sqlx_conn.write();
-        #[cfg(feature = "tracing")]
+        #[cfg(all(feature = "tracing", debug_assertions))]
         let rwlock_fut =
-            rwlock_fut.instrument(info_span!("Database connection RwLockWriteGuard acquire"));
+            rwlock_fut.instrument(debug_span!("Database connection RwLockWriteGuard acquire"));
         rwlock_fut.await
     }
 }
