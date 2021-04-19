@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2021-04-19
+
+- Change: reduce `async_std::RwLock` await trace spans (`info` -> `debug` level).
+
 ## [0.6.0] - 2021-03-22
 
 This release adds integration with the `tracing` crate ecosystem.
